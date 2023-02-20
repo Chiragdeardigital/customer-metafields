@@ -34,24 +34,10 @@ const shopify = shopifyApi({
 
 const app = express();
 
-// var urlencodedParser = bodyParser.urlencoded({ extended: false });
+
 app.use(cors());
 
 app.use(express.json());
-
-// Function to calculate HEX Digest
-function calculateHexDigest(result) {
-  var hmac = crypto.createHmac("sha256", X_APP_ACCESS_TOKEN);
-  //passing the data to be hashed
-  const data = hmac.update(result);
-
-  //Creating the hmac in the required format
-  const gen_hmac = data.digest("hex");
-
-  //Printing the output on the console
-  // console.log('hmac : ' + gen_hmac);
-  return gen_hmac;
-}
 
 app.get("/", async (req, res) => {
   //res.send('Hello World !');
@@ -102,28 +88,10 @@ app.get("/appinstalled", (req, res) => {
   res.send("app installed success");
 });
 
-app.post("/get-results", (req, res) => {
-  // console.log(req.get("X_APP_ACCESS_TOKEN"));
-  // if (req.get("X_APP_ACCESS_TOKEN") == X_APP_ACCESS_TOKEN) {
-  //   console.log("Authorized");
-  //   res.status(200).send("Authorized");
-  // } else {
-  //   console.log("Not authorized");
-  //   res.status(400).send("Not authorized");
-  // }
-  // res.send("app installed success");
-
+app.post("/quiz-results", (req, res) => {
   // console.log(req.body);
   let dataJson = JSON.stringify(req.body.data);
-  let receivedSignature = req.body.signature;
   console.log(dataJson);
-  console.log(receivedSignature);
-  let calculatedSignature = calculateHexDigest(dataJson);
-  console.log(calculatedSignature);
-  calculatedSignature == receivedSignature
-    ? console.log("Match values")
-    : console.log("Not matched");
-  res.status(200).send("Got data");
 });
 
 //Get data from quiz test
