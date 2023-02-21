@@ -10,8 +10,8 @@ import axios from "axios";
 
 dotenv.config();
 
-const host = "localhost";
 const port = process.env.PORT || 9000;
+const shopName = "appstetest";
 
 const {
   SHOPIFY_API_KEY,
@@ -33,7 +33,6 @@ const shopify = shopifyApi({
 });
 
 const app = express();
-
 
 app.use(cors());
 
@@ -88,11 +87,191 @@ app.get("/appinstalled", (req, res) => {
   res.send("app installed success");
 });
 
-app.post("/quiz-results", (req, res) => {
+app.post("/quiz-results", async (req, res) => {
   // console.log(req.body);
-  let dataJson = JSON.stringify(req.body.data);
-  console.log(dataJson);
+  // let dataJson = JSON.stringify(req.body.data);
+  let customer_email = "rewebi2280@ngopy.com";
+  // const customer_data = await getCustomerData(customer_email);
+  // const customer_data = await updateCustomerData(
+  //   "custId",
+  //   "metafieldId",
+  //   "metafieldValue"
+  // );
+  const customer_data = await createCustomerWithMetafield("customer_email", "metafieldValue");
+  // console.log(dataJson);
+  res.send(customer_data);
 });
+
+// Get the customer
+async function getCustomerData(customer_email) {
+  let data = JSON.stringify({
+    query: `query {
+      customers(first: 10, query: "email:'${customer_email}'") {
+        edges {
+          node {
+            id
+            state
+            email
+            metafield(key: "quiz_results", namespace: "custom") {
+              id
+              key 
+              value 
+            }   
+          }
+        }
+      }
+    }`,
+    variables: {},
+  });
+
+  let config = {
+    method: "post",
+    url: `https://${shopName}.myshopify.com/admin/api/2023-01/graphql.json`,
+    headers: {
+      "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
+      "Content-Type": "application/json",
+    },
+    data: data,
+  };
+
+  try {
+    const response = await axios(config);
+    // console.log(JSON.stringify(response.data));
+    return response.data.data.customers.edges[0].node.metafield.id;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+}
+
+// Update the customer metafield
+async function updateCustomerData(custId, metafieldId, metafieldValue) {
+  custId = 6834825462070;
+  metafieldId = 28647496483126;
+  metafieldValue = { test2: "test333" };
+  metafieldValue = JSON.stringify(metafieldValue);
+  const data = JSON.stringify({
+    query: `mutation customerUpdate($input: CustomerInput!) {
+            customerUpdate(input: $input) {
+              customer {
+                id 
+                metafields(first: 5) {
+                  edges {
+                    node {
+                      id
+                      namespace
+                      key
+                      value
+                    }
+                  }
+                }
+              } 
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+
+    variables: {
+      input: {
+        id: `gid://shopify/Customer/${custId}`,
+        metafields: [
+          {
+            id: `gid://shopify/Metafield/${metafieldId}`,
+            key: "quiz_results",
+            namespace: "custom",
+            type: "json",
+            value: `${metafieldValue}`,
+          },
+        ],
+        note: "nice nice guyyyyy",
+      },
+    },
+  });
+
+  const config = {
+    method: "post",
+    url: `https://${shopName}.myshopify.com/admin/api/2023-01/graphql.json`,
+    headers: {
+      "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
+      "Content-Type": "application/json",
+    },
+    data: data,
+  };
+
+  try {
+    const response = await axios(config);
+    // console.log(JSON.stringify(response.data));
+    return response.data.data;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+}
+
+// create a customer with metafield values
+async function createCustomerWithMetafield(customer_email, metafieldValue) {
+  customer_email = "xyz@hottmail.com";
+  metafieldValue = { test2: "test333" };
+  metafieldValue = JSON.stringify(metafieldValue);
+  const data = JSON.stringify({
+    query: `mutation customerCreate($input: CustomerInput!) {
+              customerCreate(input: $input) {
+                customer {
+                  id 
+                  metafields(first: 5) {
+                    edges {
+                      node {
+                        id
+                        namespace
+                        key
+                        value
+                      }
+                    }
+                  }
+                } 
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+    variables: {
+      input: {
+        email: `${customer_email}`,
+        metafields: [
+          {
+            key: "quiz_results",
+            namespace: "custom",
+            type: "json",
+            value: `${metafieldValue}`,
+          },
+        ],
+        note: "nice nice guy",
+      },
+    },
+  });
+
+  const config = {
+    method: "post",
+    url: `https://${shopName}.myshopify.com/admin/api/2023-01/graphql.json`,
+    headers: {
+      "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
+      "Content-Type": "application/json",
+    },
+    data: data,
+  };
+
+  try {
+    const response = await axios(config);
+    // console.log(JSON.stringify(response.data));
+    return response.data.data;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+}
 
 //Get data from quiz test
 const schema = z.object({
@@ -127,7 +306,7 @@ app.get("/axiostest", async (req, res) => {
         "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
       },
     });
- 
+
     // console.log(response.data.data.subscriptions.nodes);
     res.json(response.data);
   } catch (error) {
