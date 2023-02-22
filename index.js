@@ -1,5 +1,5 @@
 import express from "express";
-import { z } from "zod";
+import { custom, z } from "zod";
 import dotenv from "dotenv";
 import "@shopify/shopify-api/adapters/node";
 import { shopifyApi, LATEST_API_VERSION } from "@shopify/shopify-api";
@@ -88,22 +88,57 @@ app.get("/appinstalled", (req, res) => {
 });
 
 app.post("/quiz-results", async (req, res) => {
-  // console.log(req.body);
-  // let dataJson = JSON.stringify(req.body.data);
-  let customer_email = "rewebi2280@ngopy.com";
-  // const customer_data = await getCustomerData(customer_email);
-  // const customer_data = await updateCustomerData(
-  //   "custId",
-  //   "metafieldId",
-  //   "metafieldValue"
-  // );
-  const customer_data = await createCustomerWithMetafield("customer_email", "metafieldValue");
-  // console.log(dataJson);
-  res.send(customer_data);
+  let dataJson = JSON.stringify(req.body);
+  console.log("Got the following data ->");
+  console.log(dataJson);
+
+  let customer = {
+    email: req.body.email,
+    results: req.body.results,
+  };
+
+  // check if a user exists with the provided email
+  const customer_data_edges = await getCustomerData(customer.email);
+
+  if (customer_data_edges.length > 0) {
+    /*
+      if the user exists, 
+      take the graphql id of that customer eg. "gid://shopify/Customer/6848262570294"
+      and the metafield id of that customer eg. "gid://shopify/Metafield/28659379601718"
+      and store it in the customer object
+    */
+    customer.id = customer_data_edges[0].node.id;
+    customer.metafield_id = customer_data_edges[0].node.metafield.id;
+
+    // update the customer's metafield
+    const customer_updated_data = await updateCustomerData(
+      customer.id,
+      customer.metafield_id,
+      customer.results
+    );
+    res.send(customer_updated_data);
+  } else {
+    // create a customer if an account doesn't exist, and add the results to the metafield.
+    console.log("No existing customer found");
+    const customer_data = await createCustomerWithMetafield(
+      customer.email,
+      customer.results
+    );
+    let userErrors = customer_data.customerCreate.userErrors;
+    if (userErrors.length > 0) {
+      console.log(JSON.stringify(userErrors[0].message));
+      res.status(422).send(userErrors[0].message);
+    } else {
+      console.log(JSON.stringify(customer_data));
+      res.send(customer_data);
+    }
+  }
+  // console.log(customer_data.length);
 });
 
 // Get the customer
 async function getCustomerData(customer_email) {
+  console.log("Getting customer data...");
   let data = JSON.stringify({
     query: `query {
       customers(first: 10, query: "email:'${customer_email}'") {
@@ -137,7 +172,7 @@ async function getCustomerData(customer_email) {
   try {
     const response = await axios(config);
     // console.log(JSON.stringify(response.data));
-    return response.data.data.customers.edges[0].node.metafield.id;
+    return response.data.data.customers.edges;
   } catch (error) {
     console.log(error);
     return error;
@@ -146,9 +181,7 @@ async function getCustomerData(customer_email) {
 
 // Update the customer metafield
 async function updateCustomerData(custId, metafieldId, metafieldValue) {
-  custId = 6834825462070;
-  metafieldId = 28647496483126;
-  metafieldValue = { test2: "test333" };
+  console.log("Updating customer data...");
   metafieldValue = JSON.stringify(metafieldValue);
   const data = JSON.stringify({
     query: `mutation customerUpdate($input: CustomerInput!) {
@@ -175,10 +208,10 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
 
     variables: {
       input: {
-        id: `gid://shopify/Customer/${custId}`,
+        id: `${custId}`,
         metafields: [
           {
-            id: `gid://shopify/Metafield/${metafieldId}`,
+            id: `${metafieldId}`,
             key: "quiz_results",
             namespace: "custom",
             type: "json",
@@ -212,8 +245,7 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
 
 // create a customer with metafield values
 async function createCustomerWithMetafield(customer_email, metafieldValue) {
-  customer_email = "xyz@hottmail.com";
-  metafieldValue = { test2: "test333" };
+  console.log("Creating a new customer...");
   metafieldValue = JSON.stringify(metafieldValue);
   const data = JSON.stringify({
     query: `mutation customerCreate($input: CustomerInput!) {
