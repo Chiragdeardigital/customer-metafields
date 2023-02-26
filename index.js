@@ -1,8 +1,7 @@
 import express from "express";
 import { custom, z } from "zod";
 import dotenv from "dotenv";
-import "@shopify/shopify-api/adapters/node";
-import { shopifyApi, LATEST_API_VERSION } from "@shopify/shopify-api";
+import { Shopify } from '@shopify/shopify-api';
 import crypto from "crypto";
 import bodyParser from "body-parser";
 import cors from "cors";
@@ -23,13 +22,13 @@ const {
 } = process.env;
 
 const shops = {};
-const shopify = shopifyApi({
-  // The next 4 values are typically read from environment variables for added security
-  apiKey: SHOPIFY_API_KEY,
-  apiSecretKey: SHOPIFY_API_SECRET,
-  scopes: SHOPIFY_API_SCOPES,
-  hostName: HOST.replace(/https:\/\//, ""),
-  IS_EMBEDDED_APP: false,
+
+Shopify.Context.initialize({
+  API_KEY: SHOPIFY_API_KEY,
+  API_SECRET_KEY: SHOPIFY_API_SECRET,
+  SCOPES: SHOPIFY_API_SCOPES,
+  HOST_NAME: HOST.replace(/https:\/\//, ''),
+  IS_EMBEDDED_APP: true,
 });
 
 const app = express();
@@ -51,32 +50,63 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.get("/auth", async (req, res) => {
-  // The library will automatically redirect the user
-  await shopify.auth.begin({
-    shop: shopify.utils.sanitizeShop(req.query.shop, true),
-    callbackPath: "/auth/callback",
-    isOnline: false,
-    rawRequest: req,
-    rawResponse: res,
-  });
+app.get('/auth', async (req, res) => {
+  const authRoute = await Shopify.Auth.beginAuth(
+    req,
+    res,
+    req.query.shop,
+    '/auth/callback',
+    false
+  );
+  res.redirect(authRoute);
 });
 
-app.get("/auth/callback", async (req, res) => {
-  // The library will automatically set the appropriate HTTP headers
-  const callback = await shopify.auth.callback({
-    rawRequest: req,
-    rawResponse: res,
-  });
-  console.log(callback);
-  console.log(callback["session"].shop);
-  // shops[shopSession.shop] = shopSession
-  shops[callback["session"].shop] = callback;
+// app.get("/auth", async (req, res) => {
+//   // The library will automatically redirect the user
+//   console.log("inside auth");
+//   await shopify.auth.begin({
+//     shop: shopify.utils.sanitizeShop(req.query.shop, true),
+//     callbackPath: "/auth/callback",
+//     isOnline: false,
+//     rawRequest: req,
+//     rawResponse: res,
+//   });
+// });
 
-  // res.redirect(`/?shop=${callback['session'].shop}&host=${req.query.host}`);
-  // You can now use callback.session to make API requests
-  res.redirect("/appinstalled");
+
+
+app.get('/auth/callback', async (req, res) => {
+  const shopSession = await Shopify.Auth.validateAuthCallback(
+    req,
+    res,
+    req.query
+  );
+  console.log(shopSession);
+  shops[shopSession.shop] = shopSession;
+  res.redirect(`/?shop=${shopSession.shop}&host=${req.query.host}`);
+  // res.redirect(
+  //   `https://${shopSession.shop}/admin/apps/custom-subscriptions-manager`
+  // );
 });
+
+
+
+// app.get("/auth/callback", async (req, res) => {
+//   console.log("inside auth callback");
+//   // The library will automatically set the appropriate HTTP headers
+//   const callback = await shopify.auth.callback({
+//     rawRequest: req,
+//     rawResponse: res,
+//   });
+//   console.log("callback console",callback);
+//   console.log("session shop",callback["session"].shop);
+//   // shops[shopSession.shop] = shopSession
+//   shops[callback["session"].shop] = callback;
+
+//   // res.redirect(`/?shop=${callback['session'].shop}&host=${req.query.host}`);
+//   // You can now use callback.session to make API requests
+//   res.redirect("/appinstalled");
+// });
 
 // Test Route
 app.get("/test", (req, res) => {
@@ -116,7 +146,14 @@ app.post("/quiz-results", async (req, res) => {
       customer.metafield_id,
       customer.results
     );
-    res.send(customer_updated_data);
+    let userErrors = customer_updated_data.customerUpdate.userErrors;
+    if (userErrors.length > 0) {
+      console.log(JSON.stringify(userErrors[0].message));
+      res.status(422).send(userErrors[0].message);
+    } else {
+      console.log(JSON.stringify(customer_updated_data));
+      res.send(customer_updated_data);
+    }
   } else {
     // create a customer if an account doesn't exist, and add the results to the metafield.
     console.log("No existing customer found");
