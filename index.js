@@ -10,7 +10,8 @@ import axios from "axios";
 dotenv.config();
 
 const port = process.env.PORT || 9000;
-const shopName = "appstetest";
+const GRAPHQL_ENDPOINT = "https://appstetest.myshopify.com/admin/api/2023-01/graphql.json";
+const METAFIELD_KEY = "quiz_results";
 
 const {
   SHOPIFY_API_KEY,
@@ -80,7 +81,7 @@ app.get("/auth/callback", async (req, res) => {
 
 // Test Route
 app.get("/test", (req, res) => {
-  res.send("Test ssss");
+  res.send("Endpoint working!!");
 });
 
 app.get("/auth-error", (req, res) => {
@@ -154,7 +155,7 @@ async function getCustomerData(customer_email) {
             id
             state
             email
-            metafield(key: "quiz_results", namespace: "custom") {
+            metafield(key: "${METAFIELD_KEY}", namespace: "custom") {
               id
               key 
               value 
@@ -168,7 +169,7 @@ async function getCustomerData(customer_email) {
 
   let config = {
     method: "post",
-    url: `https://${shopName}.myshopify.com/admin/api/2023-01/graphql.json`,
+    url: GRAPHQL_ENDPOINT,
     headers: {
       "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
       "Content-Type": "application/json",
@@ -219,20 +220,19 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
         metafields: [
           {
             id: `${metafieldId}`,
-            key: "quiz_results",
+            key: `${METAFIELD_KEY}`,
             namespace: "custom",
             type: "json",
             value: `${metafieldValue}`,
           },
         ],
-        note: "nice nice guyyyyy",
       },
     },
   });
-
+ 
   const config = {
     method: "post",
-    url: `https://${shopName}.myshopify.com/admin/api/2023-01/graphql.json`,
+    url: GRAPHQL_ENDPOINT,
     headers: {
       "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
       "Content-Type": "application/json",
@@ -281,20 +281,19 @@ async function createCustomerWithMetafield(customer_email, metafieldValue) {
         email: `${customer_email}`,
         metafields: [
           {
-            key: "quiz_results",
+            key: `${METAFIELD_KEY}`,
             namespace: "custom",
             type: "json",
             value: `${metafieldValue}`,
           },
         ],
-        note: "nice nice guy",
       },
     },
   });
 
   const config = {
     method: "post",
-    url: `https://${shopName}.myshopify.com/admin/api/2023-01/graphql.json`,
+    url: GRAPHQL_ENDPOINT,
     headers: {
       "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
       "Content-Type": "application/json",
@@ -311,48 +310,6 @@ async function createCustomerWithMetafield(customer_email, metafieldValue) {
     return error;
   }
 }
-
-//Get data from quiz test
-const schema = z.object({
-  name: z.string(),
-  age: z.number(),
-});
-
-function validateData(req, res, next) {
-  try {
-    schema.parse(req.body);
-    next();
-  } catch (error) {
-    res.status(400).send("Authorization failed");
-  }
-}
-
-app.post("/api/data", validateData, (req, res) => {
-  const data = req.body;
-  console.log(data);
-  res.send(data);
-});
-
-app.get("/axiostest", async (req, res) => {
-  try {
-    const query = ``;
-    //console.log(query);
-
-    const response = await axios({
-      method: "get",
-      url: "https://appstetest.myshopify.com/admin/api/2023-01/customers/6482888524086/metafields.json",
-      headers: {
-        "X-Shopify-Access-Token": X_SHOPIFY_ACCESS_TOKEN,
-      },
-    });
-
-    // console.log(response.data.data.subscriptions.nodes);
-    res.json(response.data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Oops ! Some error occurred");
-  }
-});
 
 app.listen(port, () => {
   console.log(`App is running on port ${port}`);
