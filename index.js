@@ -1,7 +1,7 @@
 import express from "express";
 import { custom, z } from "zod";
 import dotenv from "dotenv";
-import { Shopify } from '@shopify/shopify-api';
+import { Shopify } from "@shopify/shopify-api";
 import crypto from "crypto";
 import bodyParser from "body-parser";
 import cors from "cors";
@@ -27,14 +27,12 @@ Shopify.Context.initialize({
   API_KEY: SHOPIFY_API_KEY,
   API_SECRET_KEY: SHOPIFY_API_SECRET,
   SCOPES: SHOPIFY_API_SCOPES,
-  HOST_NAME: HOST.replace(/https:\/\//, ''),
+  HOST_NAME: HOST.replace(/https:\/\//, ""),
   IS_EMBEDDED_APP: true,
 });
 
 const app = express();
-
 app.use(cors());
-
 app.use(express.json());
 
 app.get("/", async (req, res) => {
@@ -50,71 +48,43 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.get('/auth', async (req, res) => {
+app.get("/auth", async (req, res) => {
   const authRoute = await Shopify.Auth.beginAuth(
     req,
     res,
     req.query.shop,
-    '/auth/callback',
+    "/auth/callback",
     false
   );
   res.redirect(authRoute);
 });
 
-// app.get("/auth", async (req, res) => {
-//   // The library will automatically redirect the user
-//   console.log("inside auth");
-//   await shopify.auth.begin({
-//     shop: shopify.utils.sanitizeShop(req.query.shop, true),
-//     callbackPath: "/auth/callback",
-//     isOnline: false,
-//     rawRequest: req,
-//     rawResponse: res,
-//   });
-// });
+app.get("/auth/callback", async (req, res) => {
+  try {
+    const shopSession = await Shopify.Auth.validateAuthCallback(
+      req,
+      res,
+      req.query
+    );
+    console.log(shopSession);
+    shops[shopSession.shop] = shopSession;
+    res.redirect(`/?shop=${shopSession.shop}&host=${req.query.host}`);
+  } catch (error) {
+    console.log("\x1b[31m%s\x1b[0m", "Got an error:");
+    console.log(error);
 
-
-
-app.get('/auth/callback', async (req, res) => {
-  const shopSession = await Shopify.Auth.validateAuthCallback(
-    req,
-    res,
-    req.query
-  );
-  console.log(shopSession);
-  shops[shopSession.shop] = shopSession;
-  res.redirect(`/?shop=${shopSession.shop}&host=${req.query.host}`);
-  // res.redirect(
-  //   `https://${shopSession.shop}/admin/apps/custom-subscriptions-manager`
-  // );
+    console.log("\x1b[33m%s\x1b[0m", "Redirecting...");
+    res.redirect("/auth-error");
+  }
 });
-
-
-
-// app.get("/auth/callback", async (req, res) => {
-//   console.log("inside auth callback");
-//   // The library will automatically set the appropriate HTTP headers
-//   const callback = await shopify.auth.callback({
-//     rawRequest: req,
-//     rawResponse: res,
-//   });
-//   console.log("callback console",callback);
-//   console.log("session shop",callback["session"].shop);
-//   // shops[shopSession.shop] = shopSession
-//   shops[callback["session"].shop] = callback;
-
-//   // res.redirect(`/?shop=${callback['session'].shop}&host=${req.query.host}`);
-//   // You can now use callback.session to make API requests
-//   res.redirect("/appinstalled");
-// });
 
 // Test Route
 app.get("/test", (req, res) => {
   res.send("Test ssss");
 });
 
-app.get("/appinstalled", (req, res) => {
-  res.send("app installed success");
+app.get("/auth-error", (req, res) => {
+  res.send("Oops!! Something went wrong while authenticating...");
 });
 
 app.post("/quiz-results", async (req, res) => {
@@ -385,5 +355,5 @@ app.get("/axiostest", async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log("App is running on port " + port);
+  console.log(`App is running on port ${port}`);
 });
