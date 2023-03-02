@@ -10,7 +10,8 @@ import axios from "axios";
 dotenv.config();
 
 const port = process.env.PORT || 9000;
-const GRAPHQL_ENDPOINT = "https://appstetest.myshopify.com/admin/api/2023-01/graphql.json";
+const GRAPHQL_ENDPOINT =
+  "https://appstetest.myshopify.com/admin/api/2023-01/graphql.json";
 const METAFIELD_KEY = "quiz_results";
 
 const {
@@ -99,54 +100,65 @@ app.post("/quiz-results", async (req, res) => {
   };
 
   // check if a user exists with the provided email
-  const customer_data_edges = await getCustomerData(customer.email);
+  const customer_response = await getCustomerData(customer.email);
 
-  if (customer_data_edges.length > 0) {
-    /*
-      if the user exists, 
-      take the graphql id of that customer eg. "gid://shopify/Customer/6848262570294"
-      and the metafield id of that customer eg. "gid://shopify/Metafield/28659379601718"
-      and store it in the customer object
-    */
-    customer.id = customer_data_edges[0].node.id;
-    customer.metafield_id = customer_data_edges[0].node.metafield.id;
-
-    // update the customer's metafield
-    const customer_updated_data = await updateCustomerData(
-      customer.id,
-      customer.metafield_id,
-      customer.results
+  if (customer_response?.response?.data?.errors) {
+    // check for network errors
+    console.error(
+      "\x1b[31m%s\x1b[0m",
+      JSON.stringify(customer_response.response.data)
     );
-    let userErrors = customer_updated_data.customerUpdate.userErrors;
-    if (userErrors.length > 0) {
-      console.log(JSON.stringify(userErrors[0].message));
-      res.status(422).send(userErrors[0].message);
-    } else {
-      console.log(JSON.stringify(customer_updated_data));
-      res.send(customer_updated_data);
-    }
+    res
+      .status(customer_response.response.status)
+      .send(customer_response.response.data);
   } else {
-    // create a customer if an account doesn't exist, and add the results to the metafield.
-    console.log("No existing customer found");
-    const customer_data = await createCustomerWithMetafield(
-      customer.email,
-      customer.results
-    );
-    let userErrors = customer_data.customerCreate.userErrors;
-    if (userErrors.length > 0) {
-      console.log(JSON.stringify(userErrors[0].message));
-      res.status(422).send(userErrors[0].message);
+    const customer_data_edges = customer_response;
+    if (customer_data_edges.length > 0) {
+      /*
+        if the user exists, 
+        take the graphql id of that customer eg. "gid://shopify/Customer/6848262570294"
+        and the metafield id of that customer eg. "gid://shopify/Metafield/28659379601718"
+        (metafield can be null if it is empty) and store it in the customer object.
+      */
+      customer.id = customer_data_edges[0].node.id;
+      customer.metafield_id = customer_data_edges[0].node?.metafield?.id;
+
+      // update the customer's metafield
+      const customer_updated_data = await updateCustomerData(
+        customer.id,
+        customer.metafield_id,
+        customer.results
+      );
+      let userErrors = customer_updated_data.customerUpdate.userErrors;
+      if (userErrors.length > 0) {
+        console.log(JSON.stringify(userErrors[0].message));
+        res.status(422).send(userErrors[0].message);
+      } else {
+        console.log(JSON.stringify(customer_updated_data));
+        res.send(customer_updated_data);
+      }
     } else {
-      console.log(JSON.stringify(customer_data));
-      res.send(customer_data);
+      // create a customer if an account doesn't exist, and add the results to the metafield.
+      console.log("No existing customer found");
+      const customer_data = await createCustomerWithMetafield(
+        customer.email,
+        customer.results
+      );
+      let userErrors = customer_data.customerCreate.userErrors;
+      if (userErrors.length > 0) {
+        console.log(JSON.stringify(userErrors[0].message));
+        res.status(422).send(userErrors[0].message);
+      } else {
+        console.log(JSON.stringify(customer_data));
+        res.send(customer_data);
+      }
     }
   }
-  // console.log(customer_data.length);
 });
 
 // Get the customer
 async function getCustomerData(customer_email) {
-  console.log("Getting customer data...");
+  console.log("Getting customer data for email - ", customer_email);
   let data = JSON.stringify({
     query: `query {
       customers(first: 10, query: "email:'${customer_email}'") {
@@ -182,7 +194,7 @@ async function getCustomerData(customer_email) {
     // console.log(JSON.stringify(response.data));
     return response.data.data.customers.edges;
   } catch (error) {
-    console.log(error);
+    console.log(JSON.stringify(error));
     return error;
   }
 }
@@ -191,6 +203,42 @@ async function getCustomerData(customer_email) {
 async function updateCustomerData(custId, metafieldId, metafieldValue) {
   console.log("Updating customer data...");
   metafieldValue = JSON.stringify(metafieldValue);
+
+  // CHECK IF METAFIELD ID IS PROVIDED, IF NOT THEN IT'S BECAUSE
+  // THE METAFIELD WAS EMPTY. SO METAFIELD ID IS NOT REQUIRED
+  // WHILE UPDATING IT.
+  let variable = {};
+  if (metafieldId) {
+    variable = {
+      input: {
+        id: `${custId}`,
+        metafields: [
+          {
+            id: `${metafieldId}`,
+            key: `${METAFIELD_KEY}`,
+            namespace: "custom",
+            type: "json",
+            value: `${metafieldValue}`,
+          },
+        ],
+      },
+    };
+  } else {
+    variable = {
+      input: {
+        id: `${custId}`,
+        metafields: [
+          {
+            key: `${METAFIELD_KEY}`,
+            namespace: "custom",
+            type: "json",
+            value: `${metafieldValue}`,
+          },
+        ],
+      },
+    };
+  }
+
   const data = JSON.stringify({
     query: `mutation customerUpdate($input: CustomerInput!) {
             customerUpdate(input: $input) {
@@ -214,22 +262,9 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
             }
           }`,
 
-    variables: {
-      input: {
-        id: `${custId}`,
-        metafields: [
-          {
-            id: `${metafieldId}`,
-            key: `${METAFIELD_KEY}`,
-            namespace: "custom",
-            type: "json",
-            value: `${metafieldValue}`,
-          },
-        ],
-      },
-    },
+    variables: variable,
   });
- 
+
   const config = {
     method: "post",
     url: GRAPHQL_ENDPOINT,
