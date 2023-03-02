@@ -24,7 +24,7 @@ const {
 } = process.env;
 
 const shops = {};
-
+ 
 Shopify.Context.initialize({
   API_KEY: SHOPIFY_API_KEY,
   API_SECRET_KEY: SHOPIFY_API_SECRET,
@@ -38,11 +38,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", async (req, res) => {
-  //res.send('Hello World !');
-  console.log(shops);
   if (typeof shops[req.query.shop] !== "undefined") {
-    // const sessionToken = await getSessionToken(bridgeApp);
-    // console.log(sessionToken);
     res.send("Hello World");
   } else {
     console.log(req.query["shop"]);
@@ -85,15 +81,18 @@ app.get("/test", (req, res) => {
   res.send("Endpoint working!!");
 });
 
+// Auth error Route
 app.get("/auth-error", (req, res) => {
   res.send("Oops!! Something went wrong while authenticating...");
 });
 
+// API for getting the customer quiz results and storing them in customer metafields
 app.post("/quiz-results", async (req, res) => {
   let dataJson = JSON.stringify(req.body);
-  console.log("Got the following data ->");
+  console.log("\x1b[36m%s\x1b[0m", "Got the following data ->");
   console.log(dataJson);
 
+  //creating a customer object for better accessibility
   let customer = {
     email: req.body.email,
     results: req.body.results,
@@ -114,6 +113,7 @@ app.post("/quiz-results", async (req, res) => {
   } else {
     const customer_data_edges = customer_response;
     if (customer_data_edges.length > 0) {
+      console.log("\x1b[32m%s\x1b[0m", "Customer found ✅");
       /*
         if the user exists, 
         take the graphql id of that customer eg. "gid://shopify/Customer/6848262570294"
@@ -135,6 +135,7 @@ app.post("/quiz-results", async (req, res) => {
         res.status(422).send(userErrors[0].message);
       } else {
         console.log(JSON.stringify(customer_updated_data));
+        console.log("\x1b[32m%s\x1b[0m", "Customer updated ✅");
         res.send(customer_updated_data);
       }
     } else {
@@ -145,20 +146,23 @@ app.post("/quiz-results", async (req, res) => {
         customer.results
       );
       let userErrors = customer_data.customerCreate.userErrors;
+
+      // check for any errors returned by graphql
       if (userErrors.length > 0) {
         console.log(JSON.stringify(userErrors[0].message));
         res.status(422).send(userErrors[0].message);
       } else {
         console.log(JSON.stringify(customer_data));
+        console.log("\x1b[32m%s\x1b[0m", "Customer created with values ✅");
         res.send(customer_data);
       }
     }
   }
 });
 
-// Get the customer
+// Get the customer from the provided email
 async function getCustomerData(customer_email) {
-  console.log("Getting customer data for email - ", customer_email);
+  console.log("\x1b[33m%s\x1b[0m", `Getting customer data for email - ${customer_email}...⏳`);
   let data = JSON.stringify({
     query: `query {
       customers(first: 10, query: "email:'${customer_email}'") {
@@ -201,7 +205,7 @@ async function getCustomerData(customer_email) {
 
 // Update the customer metafield
 async function updateCustomerData(custId, metafieldId, metafieldValue) {
-  console.log("Updating customer data...");
+  console.log("\x1b[33m%s\x1b[0m", "Updating customer data...⏳");
   metafieldValue = JSON.stringify(metafieldValue);
 
   // CHECK IF METAFIELD ID IS PROVIDED, IF NOT THEN IT'S BECAUSE
@@ -287,7 +291,7 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
 
 // create a customer with metafield values
 async function createCustomerWithMetafield(customer_email, metafieldValue) {
-  console.log("Creating a new customer...");
+  console.log("\x1b[33m%s\x1b[0m", "Creating a new customer...⏳");
   metafieldValue = JSON.stringify(metafieldValue);
   const data = JSON.stringify({
     query: `mutation customerCreate($input: CustomerInput!) {
