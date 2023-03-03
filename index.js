@@ -24,7 +24,7 @@ const {
 } = process.env;
 
 const shops = {};
- 
+
 Shopify.Context.initialize({
   API_KEY: SHOPIFY_API_KEY,
   API_SECRET_KEY: SHOPIFY_API_SECRET,
@@ -96,10 +96,11 @@ app.post("/quiz-results", async (req, res) => {
   let customer = {
     email: req.body.email,
     results: req.body.results,
+    locale: req.body.locale,
   };
 
   // check if a user exists with the provided email
-  const customer_response = await getCustomerData(customer.email);
+  const customer_response = await getCustomerData(customer);
 
   if (customer_response?.response?.data?.errors) {
     // check for network errors
@@ -124,11 +125,7 @@ app.post("/quiz-results", async (req, res) => {
       customer.metafield_id = customer_data_edges[0].node?.metafield?.id;
 
       // update the customer's metafield
-      const customer_updated_data = await updateCustomerData(
-        customer.id,
-        customer.metafield_id,
-        customer.results
-      );
+      const customer_updated_data = await updateCustomerData(customer);
       let userErrors = customer_updated_data.customerUpdate.userErrors;
       if (userErrors.length > 0) {
         console.log(JSON.stringify(userErrors[0].message));
@@ -141,10 +138,7 @@ app.post("/quiz-results", async (req, res) => {
     } else {
       // create a customer if an account doesn't exist, and add the results to the metafield.
       console.log("No existing customer found");
-      const customer_data = await createCustomerWithMetafield(
-        customer.email,
-        customer.results
-      );
+      const customer_data = await createCustomerWithMetafield(customer);
       let userErrors = customer_data.customerCreate.userErrors;
 
       // check for any errors returned by graphql
@@ -161,16 +155,20 @@ app.post("/quiz-results", async (req, res) => {
 });
 
 // Get the customer from the provided email
-async function getCustomerData(customer_email) {
-  console.log("\x1b[33m%s\x1b[0m", `Getting customer data for email - ${customer_email}...⏳`);
+async function getCustomerData({ email }) {
+  console.log(
+    "\x1b[33m%s\x1b[0m",
+    `Getting customer data for email - ${email}...⏳`
+  );
   let data = JSON.stringify({
     query: `query {
-      customers(first: 10, query: "email:'${customer_email}'") {
+      customers(first: 10, query: "email:'${email}'") {
         edges {
           node {
             id
             state
             email
+            locale
             metafield(key: "${METAFIELD_KEY}", namespace: "custom") {
               id
               key 
@@ -204,25 +202,25 @@ async function getCustomerData(customer_email) {
 }
 
 // Update the customer metafield
-async function updateCustomerData(custId, metafieldId, metafieldValue) {
+async function updateCustomerData({ id, metafield_id, results }) {
   console.log("\x1b[33m%s\x1b[0m", "Updating customer data...⏳");
-  metafieldValue = JSON.stringify(metafieldValue);
+  results = JSON.stringify(results);
 
   // CHECK IF METAFIELD ID IS PROVIDED, IF NOT THEN IT'S BECAUSE
   // THE METAFIELD WAS EMPTY. SO METAFIELD ID IS NOT REQUIRED
   // WHILE UPDATING IT.
   let variable = {};
-  if (metafieldId) {
+  if (metafield_id) {
     variable = {
       input: {
-        id: `${custId}`,
+        id: `${id}`,
         metafields: [
           {
-            id: `${metafieldId}`,
+            id: `${metafield_id}`,
             key: `${METAFIELD_KEY}`,
             namespace: "custom",
             type: "json",
-            value: `${metafieldValue}`,
+            value: `${results}`,
           },
         ],
       },
@@ -230,13 +228,13 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
   } else {
     variable = {
       input: {
-        id: `${custId}`,
+        id: `${id}`,
         metafields: [
           {
             key: `${METAFIELD_KEY}`,
             namespace: "custom",
             type: "json",
-            value: `${metafieldValue}`,
+            value: `${results}`,
           },
         ],
       },
@@ -247,7 +245,8 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
     query: `mutation customerUpdate($input: CustomerInput!) {
             customerUpdate(input: $input) {
               customer {
-                id 
+                id
+                locale 
                 metafields(first: 5) {
                   edges {
                     node {
@@ -290,14 +289,15 @@ async function updateCustomerData(custId, metafieldId, metafieldValue) {
 }
 
 // create a customer with metafield values
-async function createCustomerWithMetafield(customer_email, metafieldValue) {
+async function createCustomerWithMetafield({ email, results, locale }) {
   console.log("\x1b[33m%s\x1b[0m", "Creating a new customer...⏳");
-  metafieldValue = JSON.stringify(metafieldValue);
+  results = JSON.stringify(results);
   const data = JSON.stringify({
     query: `mutation customerCreate($input: CustomerInput!) {
               customerCreate(input: $input) {
                 customer {
-                  id 
+                  id
+                  locale 
                   metafields(first: 5) {
                     edges {
                       node {
@@ -317,13 +317,14 @@ async function createCustomerWithMetafield(customer_email, metafieldValue) {
             }`,
     variables: {
       input: {
-        email: `${customer_email}`,
+        email: `${email}`,
+        locale: `${locale}`,
         metafields: [
           {
             key: `${METAFIELD_KEY}`,
             namespace: "custom",
             type: "json",
-            value: `${metafieldValue}`,
+            value: `${results}`,
           },
         ],
       },
